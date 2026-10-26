@@ -23,6 +23,8 @@ export interface M3SegmentedButtonProps {
   /** Custom selected label/icon color. Defaults to theme if omitted */
   selectedTextColor?: string;
   className?: string;
+  /** If true, removes the checkmark icon when selected to prevent layout shift */
+  noCheckmark?: boolean;
 }
 
 export function M3SegmentedButton({
@@ -32,6 +34,7 @@ export function M3SegmentedButton({
   color,
   selectedTextColor,
   className = '',
+  noCheckmark = false,
 }: M3SegmentedButtonProps) {
   const customStyles: Record<string, string> = {};
   if (color) {
@@ -45,16 +48,26 @@ export function M3SegmentedButton({
   return (
     <div className={className} style={customStyles}>
       <md-outlined-segmented-button-set>
-        {options.map((option, index) => (
-          <md-outlined-segmented-button
-            key={index}
-            label={option.label}
-            selected={selectedIndex === index}
-            onClick={() => onChange(index)}
-          >
-            {option.icon && <md-icon slot="icon">{option.icon}</md-icon>}
-          </md-outlined-segmented-button>
-        ))}
+        {options.map((option, index) => {
+          const isSelected = selectedIndex === index;
+          return (
+            <md-outlined-segmented-button
+              key={index}
+              label={option.label}
+              selected={isSelected}
+              no-checkmark={noCheckmark ? "" : undefined}
+              ref={(el: HTMLElement | null) => {
+                if (el) {
+                  (el as unknown as { noCheckmark: boolean }).noCheckmark = Boolean(noCheckmark);
+                }
+              }}
+              style={{ whiteSpace: 'nowrap' }}
+              onClick={() => onChange(index)}
+            >
+              {option.icon && <md-icon slot="icon">{option.icon}</md-icon>}
+            </md-outlined-segmented-button>
+          );
+        })}
       </md-outlined-segmented-button-set>
     </div>
   );

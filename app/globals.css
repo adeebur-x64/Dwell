@@ -51,3 +51,38 @@ body {
   margin: 0;
   padding: 0;
 }
+
+/* Custom themed scrollbar for embedded containers */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 51, 83, 0.35) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 6px 0;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 51, 83, 0.35);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 51, 83, 0.6);
+}
+
+/* Prevent text wrapping in segmented buttons */
+md-outlined-segmented-button {
+  white-space: nowrap !important;
+}
+
+md-outlined-segmented-button-set {
+  overflow: visible !important;
+}

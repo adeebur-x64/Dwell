@@ -7,19 +7,18 @@ import { usePathname, useRouter } from "next/navigation";
 
 const NavTabs = dynamic(
   () => import("@/components/material").then((mod) => mod.NavTabs),
-  { ssr: false }
+  { ssr: false },
 );
 
 const M3Fab = dynamic(
   () => import("@/components/material").then((mod) => mod.M3Fab),
-  { ssr: false }
+  { ssr: false },
 );
 
 const routes: Record<string, string> = {
   overview: "/overview",
   detail: "/insights",
   settings: "/settings",
-  account: "/account",
 };
 
 const STORAGE_KEY = "dwell_sidebar_collapsed";
@@ -55,7 +54,6 @@ export default function Sidebar() {
   const getActiveTab = () => {
     if (pathname?.startsWith("/insights")) return "detail";
     if (pathname?.startsWith("/settings")) return "settings";
-    if (pathname?.startsWith("/account")) return "account";
     return "overview";
   };
 
@@ -87,7 +85,9 @@ export default function Sidebar() {
           </div>
           <h1
             className={`text-3xl font-bold whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${
-              collapsed ? "max-w-0 opacity-0 pointer-events-none" : "max-w-[200px] opacity-100"
+              collapsed
+                ? "max-w-0 opacity-0 pointer-events-none"
+                : "max-w-[200px] opacity-100"
             }`}
           >
             <Link href="/overview">Dwell</Link>
@@ -117,10 +117,7 @@ export default function Sidebar() {
         <NavTabs
           title=""
           collapsed={collapsed}
-          items={[
-            { id: "settings", label: "Settings", icon: "settings" },
-            { id: "account", label: "Account", icon: "account_circle" },
-          ]}
+          items={[{ id: "settings", label: "Settings", icon: "settings" }]}
           activeId={getActiveTab()}
           onChange={handleTabChange}
         />

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, powerMonitor } = require("electron");
+const { app, BrowserWindow, powerMonitor, ipcMain } = require("electron");
 const serve = require("electron-serve");
 const path = require("path");
 const fs = require("fs");
@@ -17,6 +17,11 @@ const SetThreadDesktop = user32.func("bool __stdcall SetThreadDesktop(intptr_t h
 const CloseDesktop = user32.func("bool __stdcall CloseDesktop(intptr_t hDesktop)");
 const GetForegroundWindow = user32.func("intptr_t __stdcall GetForegroundWindow()");
 const GetWindowThreadProcessId = user32.func("uint32_t __stdcall GetWindowThreadProcessId(intptr_t hWnd, _Out_ uint32_t *lpdwProcessId)");
+const GetShellWindow = user32.func("intptr_t __stdcall GetShellWindow()");
+const GetDesktopWindow = user32.func("intptr_t __stdcall GetDesktopWindow()");
+const GetClassNameW = user32.func("int __stdcall GetClassNameW(intptr_t hWnd, _Out_ char16_t *lpClassName, int nMaxCount)");
+const FindWindowExW = user32.func("intptr_t __stdcall FindWindowExW(intptr_t hWndParent, intptr_t hWndChildAfter, str16 lpszClass, str16 lpszWindow)");
+const EnumChildWindows = user32.func("bool __stdcall EnumChildWindows(intptr_t hWndParent, void *lpEnumFunc, intptr_t lParam)");
 
 const OpenProcess = kernel32.func("intptr_t __stdcall OpenProcess(uint32_t dwDesiredAccess, bool bInheritHandle, uint32_t dwProcessId)");
 const QueryFullProcessImageNameW = kernel32.func("bool __stdcall QueryFullProcessImageNameW(intptr_t hProcess, uint32_t dwFlags, _Out_ char16_t *lpExeName, _Inout_ uint32_t *lpdwSize)");
@@ -117,7 +122,45 @@ function getActiveProcessDisplayName() {
       return null;
     }
 
-    const hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+    // Check window class
+    const classBuf = Buffer.alloc(512);
+    const classLen = GetClassNameW(hwnd, classBuf, 256);
+    const className = classLen > 0 ? classBuf.toString("utf16le").slice(0, classLen) : "";
+
+    // Exclude taskbar, system trays, start menu, search flyout, desktop, and system overlays
+    const SYSTEM_CLASSES = [
+      "Shell_TrayWnd",              // Taskbar
+      "Shell_SecondaryTrayWnd",    // Secondary Taskbar
+      "Windows.UI.Core.CoreWindow", // Often Start Menu / Action Center / Search
+      "SearchPane",
+      "Progman",                    // Desktop
+      "WorkerW",                    // Desktop background
+      "TopLevelWindowForOverflowXamlIsland", // System trays / flyouts
+      "XamlExplorerHostIslandWindow",        // Windows 11 taskbar / start flyout
+      "NotifyIconOverflowWindow",
+    ];
+
+    const shellWnd = GetShellWindow();
+    const desktopWnd = GetDesktopWindow();
+    if (hwnd === shellWnd || hwnd === desktopWnd || SYSTEM_CLASSES.includes(className)) {
+      return null;
+    }
+
+    let targetPid = pid;
+
+    // Handle Modern / UWP Apps wrapped in ApplicationFrameHost.exe (e.g. Calculator, Settings)
+    if (className === "ApplicationFrameWindow") {
+      let coreChild = FindWindowExW(hwnd, 0, "Windows.UI.Core.CoreWindow", null);
+      if (coreChild) {
+        const childPid = [0];
+        GetWindowThreadProcessId(coreChild, childPid);
+        if (childPid[0] > 0 && childPid[0] !== pid) {
+          targetPid = childPid[0];
+        }
+      }
+    }
+
+    const hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, targetPid);
     if (!hProcess) {
       return null;
     }
@@ -128,8 +171,35 @@ function getActiveProcessDisplayName() {
       if (QueryFullProcessImageNameW(hProcess, 0, buffer, sizePtr)) {
         const fullPath = koffi.decode(buffer, "char16_t", sizePtr[0]);
         if (fullPath) {
+          const exeName = path.basename(fullPath).toLowerCase();
+
+          // Exclude system/shell processes
+          const SYSTEM_EXES = [
+            "searchhost.exe",
+            "searchapp.exe",
+            "startmenuexperiencehost.exe",
+            "shellexperiencehost.exe",
+            "explorer.exe", // Taskbar / desktop clicks
+            "textinputhost.exe",
+            "lockapp.exe",
+            "systemsettings.exe", // Optional, but usually users don't want Windows OS background hosts
+            "applicationframehost.exe", // Fallback if UWP resolution didn't resolve to a child
+          ];
+
+          if (SYSTEM_EXES.includes(exeName)) {
+            return null;
+          }
+
           const friendly = getFriendlyNameFromPath(fullPath);
-          if (friendly === "Dwell") {
+          if (
+            !friendly ||
+            friendly === "Dwell" ||
+            friendly === "Application Frame Host" ||
+            friendly === "Search application" ||
+            friendly === "Windows Shell Experience Host" ||
+            friendly === "Windows Explorer" ||
+            friendly.includes("Microsoft® Windows® Operating System")
+          ) {
             return null;
           }
           return friendly;
@@ -152,24 +222,106 @@ function getActiveProcessDisplayName() {
 // File to log screen time
 const LOG_FILE_PATH = path.join(__dirname, "../screen_time.txt");
 
-// State for tracked application times (fileName -> seconds)
-const appUsageSeconds = new Map();
+// State for tracked application times grouped by date (YYYY-MM-DD -> Map(appName -> seconds))
+const appUsageByDate = new Map();
 let isSystemSleeping = false;
 let isScreenLocked = false;
 
-// Load existing log file if present
+function getTodayKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getTodayMap() {
+  const today = getTodayKey();
+  if (!appUsageByDate.has(today)) {
+    appUsageByDate.set(today, new Map());
+  }
+  return appUsageByDate.get(today);
+}
+
 function loadExistingUsage() {
+  appUsageByDate.clear();
   try {
     if (fs.existsSync(LOG_FILE_PATH)) {
       const content = fs.readFileSync(LOG_FILE_PATH, "utf-8");
       const lines = content.split(/\r?\n/);
+
+      // Determine date for legacy lines that might appear before any "### DATE:" header
+      let legacyDate = null;
       for (const line of lines) {
+        const lastUpdatedMatch = line.match(/Last Updated:\s*([^\r\n]+)/i);
+        if (lastUpdatedMatch) {
+          const dateStr = lastUpdatedMatch[1].trim();
+          const dmy = dateStr.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+          if (dmy) {
+            legacyDate = `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+          } else {
+            const parsed = new Date(dateStr);
+            if (!isNaN(parsed.getTime())) {
+              const y = parsed.getFullYear();
+              const m = String(parsed.getMonth() + 1).padStart(2, "0");
+              const d = String(parsed.getDate()).padStart(2, "0");
+              legacyDate = `${y}-${m}-${d}`;
+            }
+          }
+          break;
+        }
+      }
+
+      let currentDate = legacyDate || "2026-10-26";
+      let inDataSection = false;
+
+      const IGNORED_NAMES = [
+        "Dwell",
+        "TOTAL TIME",
+        "TODAY TOTAL",
+        "Application Frame Host",
+        "Search application",
+        "Windows Shell Experience Host",
+        "Windows Explorer",
+      ];
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+
+        // Match date header: ### DATE: 2026-10-26
+        const dateMatch = trimmed.match(/^###\s*DATE:\s*(\d{4}-\d{2}-\d{2})/i);
+        if (dateMatch) {
+          currentDate = dateMatch[1];
+          if (!appUsageByDate.has(currentDate)) {
+            appUsageByDate.set(currentDate, new Map());
+          }
+          continue;
+        }
+
+        // Header separator
+        if (trimmed.startsWith("===")) {
+          inDataSection = !inDataSection;
+          continue;
+        }
+
+        // Only parse app lines
         const match = line.match(/^(.+?)\s*:\s*.*?\(?(\d+)\s*seconds?\)?$/i);
         if (match) {
           const appName = match[1].trim();
           const seconds = parseInt(match[2], 10);
-          if (appName && appName !== "Dwell" && !isNaN(seconds)) {
-            appUsageSeconds.set(appName, seconds);
+          if (
+            appName &&
+            !IGNORED_NAMES.includes(appName) &&
+            !appName.includes("Windows® Operating System") &&
+            !appName.startsWith("Last Updated") &&
+            !appName.startsWith("TODAY TOTAL") &&
+            !appName.startsWith("TOTAL TIME") &&
+            !isNaN(seconds)
+          ) {
+            if (!appUsageByDate.has(currentDate)) {
+              appUsageByDate.set(currentDate, new Map());
+            }
+            appUsageByDate.get(currentDate).set(appName, seconds);
           }
         }
       }
@@ -193,23 +345,95 @@ function formatDuration(totalSeconds) {
   return parts.join(" ");
 }
 
-// Save usage map to screen_time.txt
+// Returns stats for any specific date
+function getUsageStatsForDate(dateKey) {
+  const targetDate = dateKey || getTodayKey();
+  const map = appUsageByDate.get(targetDate) || new Map();
+  let totalSeconds = 0;
+  const apps = [];
+
+  for (const [appName, seconds] of map.entries()) {
+    totalSeconds += seconds;
+    apps.push({ name: appName, seconds });
+  }
+
+  apps.sort((a, b) => b.seconds - a.seconds);
+
+  return {
+    date: targetDate,
+    totalSeconds,
+    totalFormatted: formatDuration(totalSeconds),
+    apps,
+  };
+}
+
+// Returns stats dictionary for all tracked dates
+function getAllUsageStats() {
+  const all = {};
+  for (const [dateKey, map] of appUsageByDate.entries()) {
+    let totalSeconds = 0;
+    const apps = [];
+    for (const [appName, seconds] of map.entries()) {
+      totalSeconds += seconds;
+      apps.push({ name: appName, seconds });
+    }
+    apps.sort((a, b) => b.seconds - a.seconds);
+    all[dateKey] = {
+      date: dateKey,
+      totalSeconds,
+      totalFormatted: formatDuration(totalSeconds),
+      apps,
+    };
+  }
+  return all;
+}
+
+// Returns stats for the current day only (resets at midnight in the app)
+function getTodayUsageStats() {
+  const today = getTodayKey();
+  const todayStats = getUsageStatsForDate(today);
+  return {
+    ...todayStats,
+    allStats: getAllUsageStats(),
+  };
+}
+
+// Save complete log with dates to screen_time.txt
 function saveUsageToFile() {
   try {
-    const sorted = Array.from(appUsageSeconds.entries()).sort((a, b) => b[1] - a[1]);
+    const todayStats = getTodayUsageStats();
     const lines = [
       "==================================================",
       "                DWELL SCREEN TIME                 ",
       `Last Updated: ${new Date().toLocaleString()}`,
+      `TODAY TOTAL : ${todayStats.totalFormatted} (${todayStats.totalSeconds} seconds)`,
       "==================================================",
       "",
     ];
 
-    for (const [appName, seconds] of sorted) {
-      lines.push(`${appName.padEnd(30)} : ${formatDuration(seconds).padEnd(15)} (${seconds} seconds)`);
+    // Write entries ordered by date (most recent date first)
+    const sortedDates = Array.from(appUsageByDate.keys()).sort().reverse();
+
+    for (const dateKey of sortedDates) {
+      const map = appUsageByDate.get(dateKey);
+      if (!map || map.size === 0) continue;
+
+      let dateTotal = 0;
+      const dateApps = [];
+      for (const [appName, seconds] of map.entries()) {
+        dateTotal += seconds;
+        dateApps.push({ name: appName, seconds });
+      }
+      dateApps.sort((a, b) => b.seconds - a.seconds);
+
+      lines.push(`### DATE: ${dateKey} (Total: ${formatDuration(dateTotal)})`);
+      lines.push("--------------------------------------------------");
+      for (const app of dateApps) {
+        lines.push(`${app.name.padEnd(30)} : ${formatDuration(app.seconds).padEnd(15)} (${app.seconds} seconds)`);
+      }
+      lines.push("");
     }
 
-    lines.push("");
     fs.writeFileSync(LOG_FILE_PATH, lines.join("\n"), "utf-8");
   } catch (err) {
     console.error("Failed to write to screen_time.txt:", err);
@@ -220,29 +444,48 @@ function saveUsageToFile() {
 function startTracking() {
   loadExistingUsage();
 
+  let activeTrackingDate = getTodayKey();
+  let ticksSinceLastSave = 0;
+
+  function handleDateChangeIfNeeded() {
+    const today = getTodayKey();
+    if (today !== activeTrackingDate) {
+      console.log(`[Dwell] Date change detected from ${activeTrackingDate} to ${today}`);
+      activeTrackingDate = today;
+      ticksSinceLastSave = 0;
+      saveUsageToFile();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("screen-time-update", getTodayUsageStats());
+      }
+    }
+  }
+
   // Listen to power & lock events to prevent recording fake time during sleep/lock
   powerMonitor.on("suspend", () => {
     isSystemSleeping = true;
   });
   powerMonitor.on("resume", () => {
     isSystemSleeping = false;
+    handleDateChangeIfNeeded();
   });
   powerMonitor.on("lock-screen", () => {
     isScreenLocked = true;
   });
   powerMonitor.on("unlock-screen", () => {
     isScreenLocked = false;
+    handleDateChangeIfNeeded();
   });
 
-  let ticksSinceLastSave = 0;
-
   setInterval(() => {
-    // 1. Don't track if computer is suspended/sleeping or screen is locked
+    // 1. Check for date change on EVERY tick (crossing midnight or system clock manual adjustment)
+    handleDateChangeIfNeeded();
+
+    // 2. Don't track if computer is suspended/sleeping or screen is locked
     if (isSystemSleeping || isScreenLocked) {
       return;
     }
 
-    // 2. Don't track if user has been completely idle (no keyboard/mouse for > 120 seconds)
+    // 3. Don't track if user has been completely idle (no keyboard/mouse for > 120 seconds)
     const idleSeconds = powerMonitor.getSystemIdleTime();
     if (idleSeconds > 120) {
       return;
@@ -251,8 +494,14 @@ function startTracking() {
     try {
       const displayName = getActiveProcessDisplayName();
       if (displayName) {
-        const current = appUsageSeconds.get(displayName) || 0;
-        appUsageSeconds.set(displayName, current + 1);
+        const todayMap = getTodayMap();
+        const current = todayMap.get(displayName) || 0;
+        todayMap.set(displayName, current + 1);
+
+        // Broadcast update to renderer UI
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("screen-time-update", getTodayUsageStats());
+        }
 
         ticksSinceLastSave++;
         // Write to file every 5 seconds to reduce disk I/O while keeping it fresh
@@ -267,8 +516,10 @@ function startTracking() {
   }, 1000);
 }
 
+let mainWindow = null;
+
 const createWindow = () => {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1050,
     height: 700,
     minWidth: 1050,
@@ -279,17 +530,38 @@ const createWindow = () => {
   });
 
   if (app.isPackaged) {
-    appServe(win).then(() => {
-      win.loadURL("app://-");
+    appServe(mainWindow).then(() => {
+      mainWindow.loadURL("app://-");
     });
   } else {
-    win.loadURL("http://localhost:3000");
-    win.webContents.openDevTools();
-    win.webContents.on("did-fail-load", (e, code, desc) => {
-      win.webContents.reloadIgnoringCache();
+    mainWindow.loadURL("http://localhost:3000");
+    mainWindow.webContents.openDevTools();
+    let reloadTimer = null;
+    mainWindow.webContents.on("did-fail-load", () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.reloadIgnoringCache();
+        }
+      }, 500);
     });
   }
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
 };
+
+ipcMain.handle("get-screen-time", (event, targetDate) => {
+  if (targetDate) {
+    return getUsageStatsForDate(targetDate);
+  }
+  return getTodayUsageStats();
+});
+
+ipcMain.handle("get-all-screen-time", () => {
+  return getAllUsageStats();
+});
 
 app.on("ready", () => {
   createWindow();
