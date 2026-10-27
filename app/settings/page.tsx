@@ -60,7 +60,9 @@ export default function SettingsPage() {
       <div className="flex flex-col gap-6 p-6 rounded-2xl bg-(--md-sys-color-surface-container-high)">
         <section>
           <h2 className="text-xl font-semibold text-(--md-sys-color-primary) mb-3 flex items-center gap-2">
-            <span className="material-symbols-outlined">power_settings_new</span>
+            <span className="material-symbols-outlined">
+              power_settings_new
+            </span>
             Startup Behavior
           </h2>
 
@@ -69,10 +71,14 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between p-4 rounded-xl bg-(--md-sys-color-surface-container) border border-(--md-sys-color-outline-variant)/20">
               <div className="flex items-center gap-3">
                 <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-(--md-sys-color-primary-container) text-(--md-sys-color-on-primary-container)">
-                  <span className="material-symbols-outlined text-xl">rocket_launch</span>
+                  <span className="material-symbols-outlined text-xl">
+                    rocket_launch
+                  </span>
                 </div>
                 <div>
-                  <h3 className="text-sm font-medium text-white">Start on Windows start</h3>
+                  <h3 className="text-sm font-medium text-white">
+                    Start on Windows start
+                  </h3>
                   <p className="text-xs text-(--md-sys-color-on-surface-variant)">
                     Launch Dwell automatically when you log in to Windows
                   </p>
@@ -81,7 +87,9 @@ export default function SettingsPage() {
               <M3Switch
                 id="settings-boot-switch"
                 selected={startOnBoot}
-                onChange={(val) => updateSettings(val, val ? startMinimized : false)}
+                onChange={(val) =>
+                  updateSettings(val, val ? startMinimized : false)
+                }
               />
             </div>
 
@@ -90,10 +98,14 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between p-4 rounded-xl bg-(--md-sys-color-surface-container) border border-(--md-sys-color-outline-variant)/20 animate-in fade-in slide-in-from-top-2">
                 <div className="flex items-center gap-3">
                   <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-(--md-sys-color-secondary-container) text-(--md-sys-color-on-secondary-container)">
-                    <span className="material-symbols-outlined text-xl">vertical_align_bottom</span>
+                    <span className="material-symbols-outlined text-xl">
+                      vertical_align_bottom
+                    </span>
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-white">Start minimized</h3>
+                    <h3 className="text-sm font-medium text-white">
+                      Start minimized
+                    </h3>
                     <p className="text-xs text-(--md-sys-color-on-surface-variant)">
                       Start silently in the system tray without opening a window
                     </p>
@@ -115,7 +127,7 @@ export default function SettingsPage() {
           <div>
             <h3 className="text-sm font-medium text-white">Walkthrough</h3>
             <p className="text-xs text-(--md-sys-color-on-surface-variant)">
-              Revisit the onboarding welcome and setup guide
+              Go through the onboarding process again
             </p>
           </div>
           <Link href="/onboarding">

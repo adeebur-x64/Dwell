@@ -220,7 +220,10 @@ function getActiveProcessDisplayName() {
 }
 
 // File to log screen time
-const LOG_FILE_PATH = path.join(__dirname, "../screen_time.txt");
+const LOG_FILE_PATH = app.isPackaged
+  ? path.join(app.getPath("userData"), "screen_time.txt")
+  : path.join(__dirname, "../screen_time.txt");
+
 
 // State for tracked application times grouped by date (YYYY-MM-DD -> Map(appName -> seconds))
 const appUsageByDate = new Map();
@@ -404,7 +407,7 @@ function saveUsageToFile() {
     const todayStats = getTodayUsageStats();
     const lines = [
       "==================================================",
-      "                DWELL SCREEN TIME                 ",
+      "    DWELL SCREEN TIME  (You should ignore this)   ",
       `Last Updated: ${new Date().toLocaleString()}`,
       `TODAY TOTAL : ${todayStats.totalFormatted} (${todayStats.totalSeconds} seconds)`,
       "==================================================",

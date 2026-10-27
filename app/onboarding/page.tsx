@@ -84,8 +84,8 @@ export default function OnboardingPage() {
           </h1>
 
           <p className="text-sm sm:text-base text-[#C2C7CF] leading-relaxed mb-8 max-w-md">
-            Ever wondered how much time you&apos;ve spent using your computer this
-            day and what applications you used the most?
+            Ever wondered how much time you&apos;ve spent using your computer
+            this day and what applications you used the most?
             <br className="hidden sm:inline" />
             <span className="text-white font-medium"> Dwell</span> is here to
             help you track your screen time and productivity.
@@ -117,13 +117,18 @@ export default function OnboardingPage() {
           <div className="w-full flex flex-col rounded-2xl bg-[#161D24] border border-[#242C34] overflow-hidden mb-8 divide-y divide-[#242C34]">
             {/* Setting 1: Start on Windows start */}
             <div className="flex items-center justify-between p-4 sm:p-5 gap-4">
-              <div className="flex flex-col">
-                <span className="text-sm font-medium text-white">
-                  Start on Windows start
+              <div className="flex items-center gap-3.5 min-w-0">
+                <span className="material-symbols-outlined text-xl shrink-0 text-[#96CCFF]">
+                  rocket_launch
                 </span>
-                <span className="text-xs text-[#8C9199]">
-                  Launch Dwell automatically when you sign in
-                </span>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-white">
+                    Start on Windows start
+                  </span>
+                  <span className="text-xs text-[#8C9199]">
+                    Launch Dwell automatically when you sign in
+                  </span>
+                </div>
               </div>
               <div className="shrink-0 flex items-center">
                 <M3Switch
@@ -142,13 +147,18 @@ export default function OnboardingPage() {
             {/* Setting 2: Start minimized (Conditional on Setting 1) */}
             {startOnBoot && (
               <div className="flex items-center justify-between p-4 sm:p-5 gap-4 transition-all duration-200">
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-white">
-                    Start minimized
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <span className="material-symbols-outlined text-xl shrink-0 text-[#96CCFF]">
+                    vertical_align_bottom
                   </span>
-                  <span className="text-xs text-[#8C9199]">
-                    Keep Dwell in the system tray on startup
-                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-white">
+                      Start minimized
+                    </span>
+                    <span className="text-xs text-[#8C9199]">
+                      Keep Dwell in the system tray on startup
+                    </span>
+                  </div>
                 </div>
                 <div className="shrink-0 flex items-center">
                   <M3Switch

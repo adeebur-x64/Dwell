@@ -75,7 +75,7 @@ export default function Sidebar() {
       }`}
     >
       <div
-        className={`rounded-2xl bg-(--md-sys-color-surface-container-high) transition-[padding] duration-300 ease-in-out flex flex-col ${
+        className={`rounded-2xl transition-[padding] duration-300 ease-in-out flex flex-col ${
           collapsed ? "p-2 items-center" : "p-4"
         }`}
       >
@@ -99,7 +99,7 @@ export default function Sidebar() {
         </div>
         <hr className="h-px mt-6 mb-2 border-0 bg-(--md-sys-color-primary) rounded w-full" />
         <NavTabs
-          title=" "
+          title=""
           collapsed={collapsed}
           items={[
             { id: "overview", label: "Overview", icon: "dashboard" },
@@ -114,7 +114,7 @@ export default function Sidebar() {
         />
       </div>
       <div
-        className={`mt-auto rounded-2xl bg-(--md-sys-color-surface-container-high) transition-[padding] duration-300 ease-in-out flex flex-col ${
+        className={`mt-auto rounded-2xl transition-[padding] duration-300 ease-in-out flex flex-col ${
           collapsed ? "p-2 items-center" : "p-4"
         }`}
       >

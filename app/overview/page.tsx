@@ -91,7 +91,7 @@ export default function OverviewPage() {
       <div className="flex flex-col flex-1 min-h-0 p-8 rounded-2xl bg-(--md-sys-color-surface-container-high) overflow-hidden">
         <div className="shrink-0">
           <h1 className="text-3xl uppercase font-semibold text-(--md-sys-color-secondary) mb-3">
-            Total Time Spent
+            Total Time Spent Today
           </h1>
           <h2 className="text-6xl xl:text-6xl lg:text-5xl uppercase font-bold text-(--md-sys-color-primary) tracking-tight">
             {formatDetailedDuration(stats.totalSeconds)}
