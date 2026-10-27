@@ -1,0 +1,18 @@
+appId: "app.adeebur.dwell"
+productName: "Dwell"
+copyright: "Copyright (c) 2026 adeebur-x64.efi"
+win:
+  icon: "resources/icon.ico"
+  target:
+    - target: "dir"
+      arch:
+        - "x64"
+        - "arm64"
+    - target: "portable"
+      arch:
+        - "x64"
+        - "arm64"
+    - target: "zip"
+      arch:
+        - "x64"
+        - "arm64"
