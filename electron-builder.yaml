@@ -1,10 +1,26 @@
 appId: "app.adeebur.dwell"
 productName: "Dwell"
 copyright: "Copyright (c) 2026 adeebur-x64.efi"
+compression: "maximum"
+asar: true
+asarUnpack:
+  - "**/*.node"
+
+files:
+  - "out/**/*"
+  - "main/**/*"
+  - "resources/**/*"
+  - "package.json"
+  - "!**/.next"
+  - "!**/*.ts"
+  - "!**/*.tsx"
+  - "!app"
+  - "!components"
+
 win:
   icon: "resources/icon.ico"
   target:
-    - target: "dir"
+    - target: "nsis"
       arch:
         - "x64"
         - "arm64"
@@ -16,3 +32,11 @@ win:
       arch:
         - "x64"
         - "arm64"
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: "Dwell"
+

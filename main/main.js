@@ -1,5 +1,6 @@
 const { app, BrowserWindow, powerMonitor, ipcMain, Tray, Menu, nativeImage } = require("electron");
-const serve = require("electron-serve");
+const electronServe = require("electron-serve");
+const serve = typeof electronServe === "function" ? electronServe : (electronServe.default || electronServe);
 const path = require("path");
 const fs = require("fs");
 const koffi = require("koffi");
