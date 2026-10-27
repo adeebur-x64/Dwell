@@ -537,14 +537,32 @@ function showAndFocusWindow() {
   mainWindow.focus();
 }
 
+function getAppIconPath() {
+  const candidatePaths = [
+    path.join(__dirname, "../resources/icon.ico"),
+    path.join(__dirname, "../public/icon.ico"),
+    path.join(process.resourcesPath || "", "icon.ico"),
+    path.join(process.resourcesPath || "", "resources/icon.ico"),
+  ];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
 async function createTray() {
   if (tray) return;
 
   let trayIcon;
-  try {
-    trayIcon = await app.getFileIcon(process.execPath);
-  } catch {
-    trayIcon = nativeImage.createEmpty();
+  const appIconPath = getAppIconPath();
+  if (appIconPath) {
+    trayIcon = nativeImage.createFromPath(appIconPath);
+  } else {
+    try {
+      trayIcon = await app.getFileIcon(process.execPath);
+    } catch {
+      trayIcon = nativeImage.createEmpty();
+    }
   }
 
   if (tray) return;
@@ -583,12 +601,14 @@ async function createTray() {
 
 const createWindow = () => {
   const isHiddenStartup = process.argv.includes("--hidden") || process.argv.includes("--minimized");
+  const appIconPath = getAppIconPath();
 
   mainWindow = new BrowserWindow({
     width: 1050,
     height: 700,
     minWidth: 1050,
     minHeight: 700,
+    icon: appIconPath || undefined,
     show: !isHiddenStartup,
     autoHideMenuBar: app.isPackaged,
     webPreferences: {

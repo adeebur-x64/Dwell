@@ -13,6 +13,9 @@ const spaceGrotesk = Space_Grotesk({
 export const metadata: Metadata = {
   title: "Dwell",
   description: "Know where your time goes",
+  icons: {
+    icon: "/icon.ico",
+  },
 };
 
 export default function RootLayout({
@@ -23,6 +26,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${spaceGrotesk.variable} h-full antialiased`}>
       <head>
+        <link rel="icon" href="/icon.ico" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
