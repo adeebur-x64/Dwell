@@ -64,6 +64,10 @@ export default function Sidebar() {
     }
   };
 
+  if (pathname?.startsWith("/onboarding")) {
+    return null;
+  }
+
   return (
     <aside
       className={`flex flex-col h-[calc(100vh-40px)] m-5 align-center rounded-4xl bg-(--md-sys-color-surface-container) transition-[width,padding] duration-300 ease-in-out shrink-0 overflow-hidden ${

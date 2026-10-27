@@ -11,6 +11,12 @@ export interface ScreenTimeStats {
   allStats?: Record<string, ScreenTimeStats>;
 }
 
+export interface AppSettings {
+  startOnBoot: boolean;
+  startMinimized: boolean;
+  onboardingCompleted: boolean;
+}
+
 declare global {
   interface Window {
     electronAPI?: {

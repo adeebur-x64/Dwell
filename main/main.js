@@ -1,4 +1,4 @@
-const { app, BrowserWindow, powerMonitor, ipcMain } = require("electron");
+const { app, BrowserWindow, powerMonitor, ipcMain, Tray, Menu, nativeImage } = require("electron");
 const serve = require("electron-serve");
 const path = require("path");
 const fs = require("fs");
@@ -517,19 +517,97 @@ function startTracking() {
 }
 
 let mainWindow = null;
+let tray = null;
+let isQuitting = false;
+
+function showAndFocusWindow() {
+  if (!mainWindow) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  if (!mainWindow.isVisible()) {
+    mainWindow.show();
+  }
+  mainWindow.focus();
+}
+
+async function createTray() {
+  if (tray) return;
+
+  let trayIcon;
+  try {
+    trayIcon = await app.getFileIcon(process.execPath);
+  } catch {
+    trayIcon = nativeImage.createEmpty();
+  }
+
+  if (tray) return;
+  tray = new Tray(trayIcon);
+  tray.setToolTip("Dwell");
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: "Open Dwell",
+      click: () => {
+        showAndFocusWindow();
+      }
+    },
+    { type: "separator" },
+    {
+      label: "Exit",
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+
+  tray.setContextMenu(contextMenu);
+
+  // Left click on system tray icon opens the app
+  tray.on("click", () => {
+    showAndFocusWindow();
+  });
+
+  // Double click also opens the app
+  tray.on("double-click", () => {
+    showAndFocusWindow();
+  });
+}
 
 const createWindow = () => {
+  const isHiddenStartup = process.argv.includes("--hidden") || process.argv.includes("--minimized");
+
   mainWindow = new BrowserWindow({
     width: 1050,
     height: 700,
     minWidth: 1050,
     minHeight: 700,
+    show: !isHiddenStartup,
+    autoHideMenuBar: app.isPackaged,
     webPreferences: {
-      preload: path.join(__dirname, "preload.js")
+      preload: path.join(__dirname, "preload.js"),
+      devTools: !app.isPackaged
     }
   });
 
   if (app.isPackaged) {
+    Menu.setApplicationMenu(null);
+    mainWindow.removeMenu();
+
+    // Prevent keyboard shortcuts from opening DevTools in production
+    mainWindow.webContents.on("before-input-event", (event, input) => {
+      const isDevToolsShortcut =
+        input.key === "F12" ||
+        ((input.control || input.meta) && input.shift && (input.key.toLowerCase() === "i" || input.key.toLowerCase() === "j"));
+      if (isDevToolsShortcut) {
+        event.preventDefault();
+      }
+    });
+
     appServe(mainWindow).then(() => {
       mainWindow.loadURL("app://-");
     });
@@ -547,10 +625,67 @@ const createWindow = () => {
     });
   }
 
+  mainWindow.on("close", (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
+
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
 };
+
+const SETTINGS_FILE_PATH = path.join(app.getPath("userData"), "dwell_settings.json");
+
+function getAppSettings() {
+  const defaults = {
+    startOnBoot: false,
+    startMinimized: false,
+    onboardingCompleted: false
+  };
+  try {
+    if (fs.existsSync(SETTINGS_FILE_PATH)) {
+      const raw = fs.readFileSync(SETTINGS_FILE_PATH, "utf-8");
+      return { ...defaults, ...JSON.parse(raw) };
+    }
+  } catch (e) {
+    console.error("Error reading app settings:", e);
+  }
+  return defaults;
+}
+
+function saveAppSettings(newSettings) {
+  const current = getAppSettings();
+  const updated = { ...current, ...newSettings };
+  try {
+    fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(updated, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Error saving app settings to disk:", e);
+  }
+
+  try {
+    const args = updated.startMinimized ? ["--hidden"] : [];
+    app.setLoginItemSettings({
+      openAtLogin: !!updated.startOnBoot,
+      path: process.execPath,
+      args: args
+    });
+  } catch (e) {
+    console.error("Error updating Windows startup settings:", e);
+  }
+
+  return updated;
+}
+
+ipcMain.handle("get-app-settings", () => {
+  return getAppSettings();
+});
+
+ipcMain.handle("set-app-settings", (event, newSettings) => {
+  return saveAppSettings(newSettings);
+});
 
 ipcMain.handle("get-screen-time", (event, targetDate) => {
   if (targetDate) {
@@ -563,17 +698,33 @@ ipcMain.handle("get-all-screen-time", () => {
   return getAllUsageStats();
 });
 
-app.on("ready", () => {
-  createWindow();
-  startTracking();
-});
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
-app.on("before-quit", () => {
-  saveUsageToFile();
-});
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    showAndFocusWindow();
+  });
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});
+  app.on("ready", () => {
+    createWindow();
+    createTray();
+    startTracking();
+  });
+
+  app.on("before-quit", () => {
+    isQuitting = true;
+    saveUsageToFile();
+    if (tray) {
+      tray.destroy();
+      tray = null;
+    }
+  });
+
+  app.on("window-all-closed", () => {
+    if (isQuitting || process.platform === "darwin") {
+      app.quit();
+    }
+  });
+}
