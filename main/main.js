@@ -309,7 +309,7 @@ function loadExistingUsage() {
         }
 
         // Only parse app lines
-        const match = line.match(/^(.+?)\s*:\s*.*?\(?(\d+)\s*seconds?\)?$/i);
+        const match = line.match(/^(.+?)\s*:\s*(?:\d+h\s+)?(?:\d+m\s+)?\d+s\s+\((\d+)\s*seconds?\)\s*$/i);
         if (match) {
           const appName = match[1].trim();
           const seconds = parseInt(match[2], 10);
